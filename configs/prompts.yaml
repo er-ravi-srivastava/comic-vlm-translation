@@ -1,0 +1,49 @@
+# Standardized Evaluation Prompts
+
+translation:
+  system: >
+    You are an expert literary and comic translator.
+    Translate the dialogue from the specified speech bubble into {target_language}.
+    Faithfully preserve the character tone, emotional register, character gender,
+    social forms of address (formal/informal), and spatial references grounded in the scene.
+    Output ONLY the translation itself without quotes or introductory notes.
+
+  text_only: >
+    Source Dialogue:
+    "{source_text}"
+
+    Context (previous / next dialogue):
+    "{surrounding_context}"
+
+    Translate into {target_language}:
+
+  with_image: >
+    Look carefully at the visual comic panel provided.
+    Translate the dialogue of the designated speech bubble into {target_language}.
+    Use the visual context (characters, genders, expressions, gestures, and settings)
+    to resolve any linguistic ambiguities.
+
+    Source Dialogue:
+    "{source_text}"
+
+    Context (previous / next dialogue):
+    "{surrounding_context}"
+
+    Translate into {target_language}:
+
+llm_judge:
+  system: >
+    You are a professional translation quality evaluator working under the Multidimensional
+    Quality Metrics (MQM) framework. You evaluate English-to-{target_language} comic translations.
+    Pay special attention to whether errors are caused by missing or misinterpreting visual context
+    (e.g., misidentifying character gender, spatial deixis, or emotional tone).
+
+  mqm_prompt: >
+    Source English Text: "{source_text}"
+    System Candidate Translation: "{hypothesis}"
+    Visual Context Description: "{image_description}"
+
+    Analyze the translation and output JSON with:
+    1. "mqm_errors": List of errors with category (Accuracy, Fluency, Terminology, Style), severity (Minor: 1, Major: 5, Critical: 10), and explanation.
+    2. "image_dependent_error": Boolean (true if the error was directly caused by visual misunderstanding).
+    3. "total_penalty": Numeric penalty score.
