@@ -38,6 +38,7 @@ outputs/*
 # Secrets and keys
 .env
 api_keys.json
+wandb/
 
 # IDE
 .vscode/

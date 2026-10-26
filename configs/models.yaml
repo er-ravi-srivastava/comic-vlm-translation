@@ -53,7 +53,7 @@ models:
 # Weights & Biases (W&B) Experiment Tracking
 wandb:
   project: "comic-vlm-translation"
-  entity: null # Set your W&B username or team name here if needed
+  entity: "raviprakashshrivastav7-iiit-ranchi" # W&B entity
   log_tables: true
   tags:
     - "jnlp-2026"
