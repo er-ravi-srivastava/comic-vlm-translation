@@ -3,6 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Framework: PyTorch](https://img.shields.io/badge/Framework-PyTorch-orange.svg)](https://pytorch.org/)
+[![W&B: Tracked](https://img.shields.io/badge/Weights_&_Biases-FFBE00?logo=weightsandbiases&logoColor=black)](https://wandb.ai)
 [![Venue: JNLP Draft](https://img.shields.io/badge/Target-Journal%20of%20NLP-purple.svg)](https://www.cambridge.org/core/journals/natural-language-processing)
 
 Implementation repository and experimental evaluation suite for the paper:  
@@ -191,17 +192,21 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Running Inference across the 4 Visual Conditions
+### Running Inference across the 4 Visual Conditions (with optional W&B tracking)
 ```bash
-# Run End-to-End VLM across all 4 visual conditions
+# 1. Login to Weights & Biases (optional for online dashboard tracking)
+wandb login
+
+# 2. Run End-to-End VLM across all 4 visual conditions with W&B logging
 python -m src.pipelines.vlm_end_to_end \
     --model Qwen/Qwen2.5-VL-7B-Instruct \
     --data data/annotations/pilot_samples.json \
     --conditions text_only correct_image mismatched_image noise_image \
     --target_lang es \
-    --output_dir outputs/qwen2.5_vl_7b/
+    --output_dir outputs/qwen2.5_vl_7b/ \
+    --wandb
 
-# Run Cascaded Baseline (OCR -> MT)
+# 3. Run Cascaded Baseline (OCR -> MT)
 python -m src.pipelines.cascaded \
     --ocr paddleocr \
     --mt meta-llama/Llama-3.1-8B-Instruct \
@@ -209,12 +214,13 @@ python -m src.pipelines.cascaded \
     --output_dir outputs/cascaded/
 ```
 
-### Running Evaluation & LLM Judge
+### Running Evaluation & LLM Judge (with W&B metrics sync)
 ```bash
-# Compute COMET-Kiwi and chrF
+# Compute COMET-Kiwi, chrF, and bootstrap significance tests (logged to W&B)
 python -m src.evaluation.compute_metrics \
     --hypotheses outputs/qwen2.5_vl_7b/predictions.json \
-    --gold data/annotations/pilot_samples.json
+    --gold data/annotations/pilot_samples.json \
+    --wandb
 
 # Run Multimodal LLM-as-a-Judge for Image-Dependent Errors
 python -m src.evaluation.llm_judge \

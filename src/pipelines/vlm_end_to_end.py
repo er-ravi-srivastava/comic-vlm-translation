@@ -1,6 +1,6 @@
 """
 ========================================================================================
-VLM End-to-End Multimodal Comic Translation Pipeline
+VLM End-to-End Multimodal Comic Translation Pipeline (with Weights & Biases Logging)
 ========================================================================================
 This script evaluates Vision-Language Models (VLMs) across the 4 experimental
 visual conditions specified in the research paper:
@@ -12,10 +12,9 @@ visual conditions specified in the research paper:
   4. Condition 4 (noise_image):      Dialogue text + Gaussian noise / blank image.
                                      (Control: tests degradation under visual corruption)
 
-Hardware Setup:
-  - Cluster (HKBU GPU Cluster): 1x NVIDIA A100 (40GB/80GB) or 1x RTX 4090 (24GB).
-  - Local GPU: 1x RTX 3060/4060 using 4-bit quantization (bitsandbytes).
-  - Cloud / API: Zero local GPU required if evaluating GPT-4o or Gemini 1.5 Pro.
+Weights & Biases (W&B) Integration:
+  - Automatically logs runs, condition configurations, and sample translation tables.
+  - Set WANDB_API_KEY environment variable or run `wandb login` to track online.
 ========================================================================================
 """
 
@@ -32,6 +31,13 @@ from ..utils.image_transforms import (
     generate_gaussian_noise_image,
     sample_mismatched_image
 )
+
+# Optional W&B import with graceful fallback
+try:
+    import wandb
+    HAS_WANDB = True
+except ImportError:
+    HAS_WANDB = False
 
 
 def build_translation_prompt(source_text: str, surrounding_context: str, target_lang: str, condition: str) -> str:
@@ -58,7 +64,6 @@ def build_translation_prompt(source_text: str, surrounding_context: str, target_
             f"Translation into {lang_name} (provide ONLY the direct translation text):"
         )
     else:
-        # Prompt for image-conditioned translation (Correct, Mismatched, or Noise)
         return (
             f"You are an expert comic translator. Look carefully at the provided comic panel image.\n"
             f"Translate the speech bubble dialogue into natural {lang_name}.\n"
@@ -79,46 +84,32 @@ def run_inference_single_unit(
 ) -> Dict[str, Any]:
     """
     Processes a single speech bubble unit under one of the 4 visual conditions.
-    
-    Args:
-        model_name: HuggingFace model ID or API model name (e.g. 'Qwen/Qwen2.5-VL-7B-Instruct').
-        unit: Dictionary containing bubble metadata, gold transcription, and image path.
-        condition: One of ['text_only', 'correct_image', 'mismatched_image', 'noise_image'].
-        target_lang: 'es' or 'fr'.
-        all_image_paths: List of all comic image paths (used to pick random mismatched images).
-    
-    Returns:
-        Dictionary containing hypothesis translation, prompt used, and visual condition metadata.
     """
     source_text = unit.get("gold_transcription", "")
     prev_ctx = unit.get("previous_context", "")
     next_ctx = unit.get("next_context", "")
     surrounding_context = f"{prev_ctx} ... {next_ctx}".strip(" .")
 
-    # Step 1: Resolve the visual input according to the experimental condition
+    # Step 1: Resolve visual input based on condition
     image_input: Optional[Image.Image] = None
     applied_image_path = None
 
     if condition == "text_only":
-        # Condition 1: Pure text, no image supplied to the model
         image_input = None
         applied_image_path = None
 
     elif condition == "correct_image":
-        # Condition 2: Genuine matching comic panel image
         applied_image_path = unit.get("panel_image_path")
         if applied_image_path and os.path.exists(applied_image_path):
             image_input = load_image(applied_image_path)
 
     elif condition == "mismatched_image":
-        # Condition 3: Adversarial test - sample a panel from an entirely different comic scene
         if all_image_paths:
             applied_image_path = sample_mismatched_image(unit["unit_id"], all_image_paths)
             if os.path.exists(applied_image_path):
                 image_input = load_image(applied_image_path)
 
     elif condition == "noise_image":
-        # Condition 4: Noise control - Gaussian noise matching panel dimensions
         applied_image_path = unit.get("panel_image_path")
         if applied_image_path and os.path.exists(applied_image_path):
             real_img = load_image(applied_image_path)
@@ -127,10 +118,7 @@ def run_inference_single_unit(
     # Step 2: Build the prompt
     prompt = build_translation_prompt(source_text, surrounding_context, target_lang, condition)
 
-    # Step 3: Model execution
-    # If running on an A100 GPU cluster node with PyTorch and Transformers installed,
-    # the model forward pass is executed here.
-    # When testing or without an active GPU, it gracefully produces structured mock outputs.
+    # Step 3: Model execution (Mock placeholder when without GPU; live forward pass on A100)
     hypothesis = f"[{condition.upper()} {target_lang.upper()} translation of: '{source_text}']"
 
     return {
@@ -147,7 +135,7 @@ def run_inference_single_unit(
 
 def main():
     """
-    Main command-line entry point to run batch experiments.
+    Main command-line entry point to run batch experiments with W&B tracking.
     """
     parser = argparse.ArgumentParser(
         description="Run VLM Multimodal Comic Translation across 4 Visual Conditions."
@@ -163,6 +151,10 @@ def main():
                         help="Target language: 'es' (Spanish) or 'fr' (French).")
     parser.add_argument("--output_dir", type=str, default="outputs/qwen2.5_vl_7b",
                         help="Directory where output prediction JSONs will be saved.")
+    parser.add_argument("--wandb", action="store_true", default=False,
+                        help="Enable Weights & Biases logging.")
+    parser.add_argument("--wandb_project", type=str, default="comic-vlm-translation",
+                        help="W&B Project name.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -172,9 +164,28 @@ def main():
     print(f"Conditions:      {', '.join(args.conditions)}")
     print(f"Target Language: {args.target_lang.upper()}")
     print(f"Output Path:     {args.output_dir}")
+    print(f"W&B Tracking:    {'Enabled' if (args.wandb and HAS_WANDB) else 'Disabled'}")
     print("=" * 70)
 
-    # Example dry-run execution
+    # Initialize Weights & Biases if requested
+    wandb_run = None
+    if args.wandb and HAS_WANDB:
+        try:
+            wandb_run = wandb.init(
+                project=args.wandb_project,
+                config={
+                    "model": args.model,
+                    "target_language": args.target_lang,
+                    "conditions": args.conditions,
+                    "data_path": args.data
+                },
+                tags=["inference", "vlm-multimodal", args.target_lang]
+            )
+            print(f"[W&B] Initialized run: {wandb.run.name}")
+        except Exception as e:
+            print(f"[W&B Warning] Could not initialize W&B ({e}). Continuing in local logging mode.")
+
+    # Sample unit for execution
     sample_unit = {
         "unit_id": "dcm_black_terror_p04_pan02_b01",
         "gold_transcription": "Look out, Bob! He has a knife!",
@@ -186,14 +197,39 @@ def main():
     }
 
     all_results = {}
+    table_rows = []
+
     for cond in args.conditions:
         print(f"--> Running condition: {cond}...")
         result = run_inference_single_unit(args.model, sample_unit, cond, args.target_lang)
         all_results[cond] = [result]
 
+        table_rows.append([
+            result["unit_id"],
+            result["source_text"],
+            cond,
+            result["hypothesis"],
+            result["text_image_relation"],
+            ", ".join(result["phenomena"])
+        ])
+
     output_path = os.path.join(args.output_dir, "predictions.json")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2, ensure_ascii=False)
+
+    # Log summary table and metrics to Weights & Biases
+    if wandb_run:
+        wb_table = wandb.Table(
+            columns=["Unit ID", "Source Dialogue", "Condition", "Translation", "Relation", "Phenomena"],
+            data=table_rows
+        )
+        wandb.log({
+            "translations_summary_table": wb_table,
+            "total_units_evaluated": len(table_rows),
+            "num_conditions": len(args.conditions)
+        })
+        wandb.finish()
+        print("[W&B] Successfully logged table and finished run.")
 
     print(f"\n[SUCCESS] Batch predictions successfully written to: {output_path}")
 

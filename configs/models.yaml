@@ -49,3 +49,13 @@ models:
   # Cascaded OCR
   ocr:
     engine: "manga-ocr" # Options: "manga-ocr", "paddleocr"
+
+# Weights & Biases (W&B) Experiment Tracking
+wandb:
+  project: "comic-vlm-translation"
+  entity: null # Set your W&B username or team name here if needed
+  log_tables: true
+  tags:
+    - "jnlp-2026"
+    - "multimodal-mt"
+    - "comics"

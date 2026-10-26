@@ -2,6 +2,7 @@
 # ==============================================================================
 # SLURM Job Submission Script for HKBU GPU Cluster / High-Performance Computing
 # Project: "Where does the image matter? Translating visually grounded comics"
+# Includes Weights & Biases (W&B) experiment metric tracking
 # ==============================================================================
 #
 # Resource Request Details:
@@ -34,7 +35,7 @@ echo "Node:        $(hostname)"
 echo "Assigned GPU: $CUDA_VISIBLE_DEVICES"
 echo "=========================================================="
 
-# 1. Load Cluster Environment Modules (adapt module names to cluster environment)
+# 1. Load Cluster Environment Modules
 module purge
 module load cuda/12.2
 module load python/3.10
@@ -45,32 +46,35 @@ source ~/envs/comic_vlm_env/bin/activate
 # 3. Verify PyTorch sees the GPU
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()} | Device: {torch.cuda.get_device_name(0)}')"
 
-# 4. Create log directories
+# 4. Create directories for logs and predictions
 mkdir -p logs outputs/qwen2.5_vl_7b outputs/llama_vision_11b
 
-# 5. Run Tier 1: Qwen2.5-VL-7B-Instruct across all 4 visual conditions
+# 5. Run Tier 1: Qwen2.5-VL-7B-Instruct across all 4 visual conditions (with W&B tracking)
 echo "Running Tier 1: Qwen2.5-VL-7B across 4 conditions..."
 python -m src.pipelines.vlm_end_to_end \
     --model Qwen/Qwen2.5-VL-7B-Instruct \
     --data data/annotations/curated_benchmark_500.json \
     --conditions text_only correct_image mismatched_image noise_image \
     --target_lang es \
-    --output_dir outputs/qwen2.5_vl_7b/
+    --output_dir outputs/qwen2.5_vl_7b/ \
+    --wandb
 
-# 6. Run Tier 2: Llama-3.2-11B-Vision-Instruct across all 4 visual conditions
+# 6. Run Tier 2: Llama-3.2-11B-Vision-Instruct across all 4 visual conditions (with W&B tracking)
 echo "Running Tier 2: Llama-3.2-11B-Vision across 4 conditions..."
 python -m src.pipelines.vlm_end_to_end \
     --model meta-llama/Llama-3.2-11B-Vision-Instruct \
     --data data/annotations/curated_benchmark_500.json \
     --conditions text_only correct_image mismatched_image noise_image \
     --target_lang es \
-    --output_dir outputs/llama_vision_11b/
+    --output_dir outputs/llama_vision_11b/ \
+    --wandb
 
 # 7. Compute Automated Quality Estimation (COMET-Kiwi) and Bootstrap Statistics
-echo "Running Automated Evaluation Suite..."
+echo "Running Automated Evaluation Suite and logging to W&B..."
 python -m src.evaluation.compute_metrics \
     --hypotheses outputs/qwen2.5_vl_7b/predictions.json \
-    --gold data/annotations/curated_benchmark_500.json
+    --gold data/annotations/curated_benchmark_500.json \
+    --wandb
 
 echo "=========================================================="
 echo "Job Finished: $(date)"
