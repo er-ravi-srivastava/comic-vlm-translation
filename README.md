@@ -84,18 +84,70 @@ We implement a multi-tiered evaluation protocol:
 
 ---
 
-## 📁 5. Repository Structure
+## ⚙️ 5. Hardware Requirements & Compute Environments
+
+Execution requirements vary based on the deployment tier. For official paper results, **Option A** is the recommended configuration.
+
+### 🌟 Option A: University GPU Cluster (HKBU GPU Cluster — Ideal for Paper Runs)
+Running full-scale experiments across 300–500 dialogue units in unquantized `bfloat16` precision is best performed on institutional HPC infrastructure (such as the HKBU Faculty GPU Cluster).
+
+- **Recommended Hardware Allocation:**
+  - **GPU:** 1x NVIDIA A100 (40GB or 80GB VRAM) or 1x RTX 4090 (24GB VRAM)
+  - **CPU:** 8 vCPUs / cores (for parallel panel cropping and batch tokenization)
+  - **RAM:** 32 GB System Memory
+  - **Storage:** 50 GB high-speed scratch space (for caching HuggingFace weights and comic crops)
+- **Runtime Estimates (for 500 units $\times$ 4 visual conditions = 2,000 passes):**
+  - `Qwen2.5-VL-7B-Instruct`: ~35 – 45 minutes on A100
+  - `Llama-3.2-11B-Vision-Instruct`: ~50 – 70 minutes on A100
+  - `COMET-Kiwi` Quality Estimation: ~5 – 10 minutes on A100
+- **Automated SLURM Job Submission:**
+  A ready-to-run cluster submission script is provided in [`scripts/run_cluster_slurm.sh`](scripts/run_cluster_slurm.sh):
+  ```bash
+  # Submit job to the cluster scheduler
+  sbatch scripts/run_cluster_slurm.sh
+  
+  # Monitor job execution
+  squeue -u $USER
+  ```
+
+### 💻 Option B: Local Consumer GPU (Prototyping & Pilot Runs)
+If executing locally on consumer graphics cards:
+- **Minimum VRAM:** 8 GB – 12 GB VRAM (RTX 3060, 3070, 4060, 4070).
+- **Execution Mode:** Load models with 4-bit / 8-bit quantization (`bitsandbytes` or `AWQ`), or run via [Ollama](https://ollama.ai) (`ollama run qwen2.5-vl:7b`).
+
+### ☁️ Option C: Zero-GPU Cloud API Mode
+- Models like `GPT-4o`, `Gemini 1.5 Pro`, and `Claude 3.5 Sonnet` require **0 GB of local GPU memory**.
+- System RAM requirements drop to standard laptop specs (2 GB – 4 GB RAM) as inference runs over HTTPS APIs.
+
+### Hardware Summary Matrix
+| Model / Pipeline Component | Precision / Mode | Minimum VRAM | Min System RAM | Local Disk |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Qwen2.5-VL-7B-Instruct`** | Native `bfloat16` | **16 GB VRAM** | 16 GB | ~16 GB |
+| **`Qwen2.5-VL-7B-Instruct`** | 4-bit Quantized | **6 – 8 GB VRAM** | 16 GB | ~5 GB |
+| **`Llama-3.2-11B-Vision`** | Native `bfloat16` | **24 GB VRAM** | 32 GB | ~22 GB |
+| **`Llama-3.2-11B-Vision`** | 4-bit Quantized | **8 – 10 GB VRAM** | 16 GB | ~7 GB |
+| **`NLLB-200-3.3B` (Text MT)**| `fp16` | **7 GB VRAM** (or CPU) | 16 GB | ~7 GB |
+| **`Manga-OCR` / `PaddleOCR`**| Standard | **2 – 4 GB VRAM** (or CPU) | 8 GB | ~1 GB |
+| **`COMET-Kiwi` (Evaluation)** | Neural Metric | **4 – 6 GB VRAM** (or CPU) | 16 GB | ~3 GB |
+| **`GPT-4o` / `Gemini 1.5 Pro`** | Cloud API | **0 GB GPU (None)** | 4 GB | Minimal |
+
+---
+
+## 📁 6. Repository Structure
 
 ```
 comic-vlm-translation/
 ├── configs/
-│   ├── models.yaml             # Model IDs, API keys, temperature=0 parameters
-│   └── prompts.yaml            # Standard prompts for all 4 visual conditions & LLM judges
+│   ├── models.yaml             # Model IDs, precision, temperature=0 settings
+│   └── prompts.yaml            # Standardized prompts across all 4 visual conditions
 │
 ├── data/
 │   ├── raw/                    # Raw comic scans (Digital Comic Museum Golden Age)
 │   ├── annotations/            # JSON annotations (bubble coordinates, gold text, labels)
 │   └── crops/                  # Extracted panel crops and bubble regions
+│
+├── scripts/
+│   └── run_cluster_slurm.sh    # SLURM script for HKBU GPU Cluster (Option A)
 │
 ├── src/
 │   ├── dataset/
@@ -105,10 +157,10 @@ comic-vlm-translation/
 │   ├── pipelines/
 │   │   ├── cascaded.py          # OCR -> MT pipeline runner
 │   │   ├── oracle_cascaded.py   # Gold text -> MT runner
-│   │   └── vlm_end_to_end.py    # Qwen2.5-VL / Llama-3.2-Vision / GPT-4o runner
+│   │   └── vlm_end_to_end.py    # Multi-condition VLM inference runner
 │   │
 │   ├── evaluation/
-│   │   ├── compute_metrics.py   # COMET-Kiwi, chrF, BLEU evaluation
+│   │   ├── compute_metrics.py   # COMET-Kiwi, chrF, BLEU evaluation & bootstrap stats
 │   │   ├── llm_judge.py         # Text & Multimodal LLM MQM-style evaluator
 │   │   └── stats_analysis.py    # Bootstrap significance & mixed-effects models
 │   │
@@ -123,7 +175,7 @@ comic-vlm-translation/
 
 ---
 
-## 🚀 6. Quickstart & Installation
+## 🚀 7. Quickstart & Installation
 
 ### Environment Setup
 ```bash
