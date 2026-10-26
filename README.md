@@ -145,10 +145,12 @@ comic-vlm-translation/
 ├── data/
 │   ├── raw/                    # Raw comic scans (Digital Comic Museum Golden Age)
 │   ├── annotations/            # JSON annotations (bubble coordinates, gold text, labels)
+│   │   └── curated_benchmark_500.json # Benchmark dataset with multimodal phenomena
 │   └── crops/                  # Extracted panel crops and bubble regions
 │
 ├── scripts/
-│   └── run_cluster_slurm.sh    # SLURM script for HKBU GPU Cluster (Option A)
+│   ├── run_cluster_slurm.sh    # SLURM script for HKBU GPU Cluster (Option A)
+│   └── clear_wandb.py          # Utility to clear dashboard runs
 │
 ├── src/
 │   ├── dataset/
@@ -169,6 +171,7 @@ comic-vlm-translation/
 │       ├── image_transforms.py  # Noise generator & mismatched image sampler
 │       └── mqm_scorer.py        # Severity penalty calculator and aggregator
 │
+├── run_benchmark.py            # Primary 1-command benchmark runner (computes Tables 1-4 & W&B sync)
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -176,23 +179,79 @@ comic-vlm-translation/
 
 ---
 
-## 🚀 7. Quickstart & Installation
+## 🚀 7. Quickstart: Running on HPC & Fetching Live W&B Results
 
-### Environment Setup
+### A. Environment Setup
 ```bash
 git clone https://github.com/er-ravi-srivastava/comic-vlm-translation.git
 cd comic-vlm-translation
 
 python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
+# Linux / Cluster:
 source venv/bin/activate
+# Windows PowerShell:
+venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
-### Running Inference across the 4 Visual Conditions (with optional W&B tracking)
+### B. One-Command Publication Benchmark Run
+To compute all four research questions and immediately stream publication-grade tables and charts to your **Weights & Biases** live dashboard:
+
+```bash
+# Authenticate W&B once (if not already set in environment)
+wandb login
+
+# Execute benchmark and live sync key paper metrics
+python run_benchmark.py --wandb
+```
+
+#### Running on University GPU Cluster via SLURM:
+```bash
+# Submit full job to the HPC scheduler
+sbatch scripts/run_cluster_slurm.sh
+
+# Monitor status
+squeue -u $USER
+```
+
+---
+
+### 📈 Key Paper Metrics Fetched & Logged to W&B:
+
+When you or any collaborator runs `python run_benchmark.py --wandb`, the following publication metrics are rendered in console and automatically logged to your W&B dashboard:
+
+1. **Table 1: RQ1 - Impact of Visual Context (Grounding & Adversarial Test):**
+   - Quality Estimation (`COMET-Kiwi`) & lexical accuracy (`chrF++`) across all 4 conditions:
+     - $C_1$: Text-Only
+     - $C_2$: Text + Correct Image
+     - $C_3$: Text + Mismatched Image (Adversarial)
+     - $C_4$: Text + Gaussian Noise / Blank
+   - Observed effect size ($\Delta_{C_2 - C_1}$) and paired bootstrap statistical significance ($p$-value).
+   - Adversarial degradation drop ($\Delta_{C_2 - C_3}$) proving true visual grounding.
+2. **Table 2: RQ2 - Phenomenon-Level Breakdown:**
+   - Accuracy and $\Delta$ gains over text-only across specific linguistic phenomena:
+     - *Gender Disambiguation* (unexpressed English pronouns resolved by visual cues)
+     - *Forms of Address* (*Tú/Usted* or *Tu/Vous* based on social hierarchy and uniforms)
+     - *Spatial Deixis* ("Look at this / that")
+     - *Number Agreement* (singular vs plural)
+     - *Onomatopoeia & Sound FX*
+3. **Table 3: RQ3 - Pipeline Breakdown & Error Attribution:**
+   - Comparison across:
+     - Pipeline A: Cascaded Real-World (`Bubble Detection` $\to$ `OCR` $\to$ `MT`)
+     - Pipeline B: Oracle Baseline (`Gold Text` $\to$ `MT`)
+     - Pipeline C: End-to-End Multimodal VLM (`Qwen2.5-VL`)
+   - Quantifies the performance drop caused by historical comic typefaces (OCR Character Error Rate).
+4. **Table 4: RQ4 - Evaluation Diagnostic Power & Blind Spot:**
+   - Detection rates of `[IMAGE-DEPENDENT-ERROR]` across:
+     - Human MQM (Gold standard)
+     - Multimodal VLM Judge (with visual panel access)
+     - Text-Only LLM Judge (demonstrates the evaluation blind spot)
+     - Automated Metric (`COMET-Kiwi`)
+
+---
+
+### C. Running Individual Pipeline Components Manually (Optional)
 ```bash
 # 1. Login to Weights & Biases (optional for online dashboard tracking)
 wandb login

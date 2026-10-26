@@ -49,32 +49,13 @@ python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()} | D
 # 4. Create directories for logs and predictions
 mkdir -p logs outputs/qwen2.5_vl_7b outputs/llama_vision_11b
 
-# 5. Run Tier 1: Qwen2.5-VL-7B-Instruct across all 4 visual conditions (with W&B tracking)
-echo "Running Tier 1: Qwen2.5-VL-7B across 4 conditions..."
-python -m src.pipelines.vlm_end_to_end \
-    --model Qwen/Qwen2.5-VL-7B-Instruct \
-    --data data/annotations/curated_benchmark_500.json \
-    --conditions text_only correct_image mismatched_image noise_image \
-    --target_lang es \
-    --output_dir outputs/qwen2.5_vl_7b/ \
-    --wandb
+# 5. Run Publication Benchmark across all RQs and live stream metrics to W&B
+echo "Running Publication Benchmark and Streaming Live Metrics to W&B..."
+python run_benchmark.py --wandb
 
-# 6. Run Tier 2: Llama-3.2-11B-Vision-Instruct across all 4 visual conditions (with W&B tracking)
-echo "Running Tier 2: Llama-3.2-11B-Vision across 4 conditions..."
-python -m src.pipelines.vlm_end_to_end \
-    --model meta-llama/Llama-3.2-11B-Vision-Instruct \
-    --data data/annotations/curated_benchmark_500.json \
-    --conditions text_only correct_image mismatched_image noise_image \
-    --target_lang es \
-    --output_dir outputs/llama_vision_11b/ \
-    --wandb
-
-# 7. Compute Automated Quality Estimation (COMET-Kiwi) and Bootstrap Statistics
-echo "Running Automated Evaluation Suite and logging to W&B..."
-python -m src.evaluation.compute_metrics \
-    --hypotheses outputs/qwen2.5_vl_7b/predictions.json \
-    --gold data/annotations/curated_benchmark_500.json \
-    --wandb
+# 6. Detailed Tier 1 & Tier 2 Model Inference Runs (Optional for per-bubble logging)
+# python -m src.pipelines.vlm_end_to_end --model Qwen/Qwen2.5-VL-7B-Instruct --wandb
+# python -m src.pipelines.vlm_end_to_end --model meta-llama/Llama-3.2-11B-Vision-Instruct --wandb
 
 echo "=========================================================="
 echo "Job Finished: $(date)"
